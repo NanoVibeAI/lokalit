@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import Project from "@/models/Project";
+import ProjectMembership from "@/models/ProjectMembership";
 
 function toSlug(value: string): string {
   return value
@@ -54,6 +55,12 @@ export async function POST(req: NextRequest) {
     }
 
     const project = await Project.create({ name: name.trim(), slug, defaultLanguage, otherLanguages: cleanedOtherLanguages });
+
+    await ProjectMembership.create({
+      projectId: project._id,
+      userSub: session.userId,
+      role: "OWNER",
+    });
 
     return NextResponse.json({ message: "Project created.", project }, { status: 201 });
   } catch {

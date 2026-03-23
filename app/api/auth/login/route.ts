@@ -1,63 +1,37 @@
-import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { connectDB } from "@/lib/db";
+import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import User from "@/models/User";
-import Account from "@/models/Account";
+import crypto from "node:crypto";
 
-export async function POST(req: NextRequest) {
-  try {
-    const { email, password } = await req.json();
+function generateCodeVerifier(): string {
+  return crypto.randomBytes(32).toString("base64url");
+}
 
-    if (!email || !password) {
-      return NextResponse.json(
-        { message: "Email and password are required." },
-        { status: 400 }
-      );
-    }
+function generateCodeChallenge(verifier: string): string {
+  return crypto.createHash("sha256").update(verifier).digest("base64url");
+}
 
-    await connectDB();
+export async function GET() {
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = generateCodeChallenge(codeVerifier);
+  const state = crypto.randomBytes(16).toString("hex");
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+  // Store PKCE values in the session so they survive the Supabase redirect
+  const session = await getSession();
+  session.pkceState = state;
+  session.pkceVerifier = codeVerifier;
+  await session.save();
 
-    if (!user) {
-      return NextResponse.json(
-        { message: "Invalid email or password." },
-        { status: 401 }
-      );
-    }
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: process.env.OIDC_CLIENT_ID ?? "",
+    redirect_uri: process.env.OIDC_REDIRECT_URI ?? "",
+    scope: "openid email",
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
+  });
 
-    const passwordMatch = await bcrypt.compare(password, user.password);
+  const authUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/oauth/authorize?${params.toString()}`;
 
-    if (!passwordMatch) {
-      return NextResponse.json(
-        { message: "Invalid email or password." },
-        { status: 401 }
-      );
-    }
-
-    if (!user.emailVerified) {
-      return NextResponse.json(
-        { message: "Please verify your email before logging in.", code: "EMAIL_NOT_VERIFIED" },
-        { status: 403 }
-      );
-    }
-
-    const account = user.accountId
-      ? await Account.findById(user.accountId)
-      : null;
-
-    const session = await getSession();
-    session.userId = user._id.toString();
-    session.email = user.email;
-    session.accountId = account?._id.toString();
-    session.accountSlug = account?.account_id;
-    session.isLoggedIn = true;
-    await session.save();
-
-    const redirect = account ? "/home" : "/onboarding";
-    return NextResponse.json({ message: "Logged in successfully.", redirect }, { status: 200 });
-  } catch {
-    return NextResponse.json({ message: "Internal server error." }, { status: 500 });
-  }
+  return NextResponse.redirect(authUrl);
 }

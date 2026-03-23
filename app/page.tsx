@@ -7,6 +7,6 @@ export default async function RootPage() {
   if (session.isLoggedIn) {
     redirect(session.accountId ? "/home" : "/onboarding");
   } else {
-    redirect("/login");
+    redirect("/api/auth/login");
   }
 }

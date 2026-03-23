@@ -3,15 +3,18 @@ import Link from "next/link";
 import { getSession } from "@/lib/session";
 import { connectDB } from "@/lib/db";
 import Project, { IProject } from "@/models/Project";
+import ProjectMembership from "@/models/ProjectMembership";
 import LogoutButton from "./LogoutButton";
 import NewProjectDialog from "./NewProjectDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Settings2Icon } from "lucide-react";
 
-async function getProjects(): Promise<Pick<IProject, "_id" | "name" | "slug" | "description" | "defaultLanguage" | "createdAt">[]> {
+async function getProjects(userSub: string): Promise<Pick<IProject, "_id" | "name" | "slug" | "description" | "defaultLanguage" | "createdAt">[]> {
   await connectDB();
-  const projects = await Project.find({}, "name slug description defaultLanguage createdAt")
+  const memberships = await ProjectMembership.find({ userSub }, "projectId").lean();
+  const projectIds = memberships.map((m) => m.projectId);
+  const projects = await Project.find({ _id: { $in: projectIds } }, "name slug description defaultLanguage createdAt")
     .sort({ createdAt: -1 })
     .lean();
   return projects as never;
@@ -21,14 +24,14 @@ export default async function HomePage() {
   const session = await getSession();
 
   if (!session.isLoggedIn) {
-    redirect("/login");
+    redirect("/api/auth/login");
   }
 
   if (!session.accountId) {
-    redirect("/onboarding");
+    redirect("/account-select");
   }
 
-  const projects = await getProjects();
+  const projects = await getProjects(session.userId!);
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -36,7 +39,7 @@ export default async function HomePage() {
       <header className="border-b border-zinc-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
-            <span className="text-lg font-bold text-zinc-900">L10n</span>
+            <span className="text-lg font-bold text-zinc-900">Lokalit</span>
             <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500">
               Dashboard
             </span>
