@@ -134,7 +134,6 @@ export default function ProjectSettingsForm({
           onChange={(e) => handleSlugChange(e.target.value)}
           placeholder="e.g. mobile-app"
           required
-          className="font-mono"
         />
         <p className="text-xs text-muted-foreground">
           Used in URLs. Only lowercase letters, numbers, and hyphens.
