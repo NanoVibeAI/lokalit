@@ -126,16 +126,26 @@ async function handleCallback(req: NextRequest) {
 
   const defaultId = pref.defaultAccountId?.toString();
   const activeMembership =
-    (defaultId && memberships.find((m) => m.accountId.toString() === defaultId)) ??
+    memberships.find((m) => !!defaultId && m.accountId.toString() === defaultId) ??
     memberships[0];
 
   const account = await Account.findById(activeMembership.accountId);
 
+  if (!account) {
+    // Stale membership — account document was deleted; let user choose
+    session.userId = sub;
+    session.email = email ?? "";
+    session.accessToken = tokens.access_token;
+    session.isLoggedIn = true;
+    await session.save();
+    return NextResponse.redirect(new URL("/account-select", req.url), 303);
+  }
+
   session.userId = sub;
   session.email = email ?? "";
   session.accessToken = tokens.access_token;
-  session.accountId = account?._id.toString();
-  session.accountSlug = account?.account_id;
+  session.accountId = account._id.toString();
+  session.accountSlug = account.account_id;
   session.isLoggedIn = true;
   await session.save();
 
