@@ -155,7 +155,7 @@ export default function NewProjectDialog() {
 
             <div className="space-y-1.5">
               <Label>Slug</Label>
-              <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3 font-mono text-sm text-muted-foreground">
+              <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
                 {slug ? (
                   <span className="flex w-full items-center justify-between">
                     {slug}
@@ -173,16 +173,16 @@ export default function NewProjectDialog() {
               {slugStatus === "available" && (
                 <Alert className="border-green-200 bg-green-50 py-2 text-green-900 dark:border-green-900 dark:bg-green-950 dark:text-green-50">
                   <CheckCircle2Icon className="h-4 w-4 !text-green-600 dark:!text-green-400" />
-                  <AlertDescription className="text-green-800 dark:text-green-200">
-                    <span className="font-mono">{slug}</span> is available.
+                  <AlertDescription className="text-xs text-green-800 dark:text-green-200">
+                    <span>{slug}</span> is available.
                   </AlertDescription>
                 </Alert>
               )}
               {slugStatus === "taken" && (
                 <Alert className="border-red-200 bg-red-50 py-2 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-50">
                   <XCircleIcon className="h-4 w-4 !text-red-600 dark:!text-red-400" />
-                  <AlertDescription className="text-red-800 dark:text-red-200">
-                    <span className="font-mono">{slug}</span> is already taken. Try a different project name.
+                  <AlertDescription className="text-xs text-red-800 dark:text-red-200">
+                    <span>{slug}</span> is already taken. Try a different project name.
                   </AlertDescription>
                 </Alert>
               )}
