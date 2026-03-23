@@ -19,7 +19,7 @@ export default async function ProjectPage({
   const { slug } = await params;
 
   const session = await getSession();
-  if (!session.isLoggedIn) redirect("/login");
+  if (!session.isLoggedIn) redirect("/api/auth/login");
   if (!session.accountId) redirect("/onboarding");
 
   await connectDB();
@@ -48,7 +48,7 @@ export default async function ProjectPage({
               href="/home"
               className="text-base font-bold text-zinc-900 transition-opacity hover:opacity-75"
             >
-              L10n
+              Lokalit
             </Link>
             <span className="text-zinc-300">/</span>
             <span className="text-sm font-medium text-zinc-700">{project.name}</span>

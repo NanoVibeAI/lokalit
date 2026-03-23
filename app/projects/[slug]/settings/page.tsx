@@ -14,7 +14,7 @@ export default async function ProjectSettingsPage({
   const { slug } = await params;
 
   const session = await getSession();
-  if (!session.isLoggedIn) redirect("/login");
+  if (!session.isLoggedIn) redirect("/api/auth/login");
   if (!session.accountId) redirect("/onboarding");
 
   await connectDB();
@@ -28,7 +28,7 @@ export default async function ProjectSettingsPage({
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
             <Link href="/home" className="text-lg font-bold text-zinc-900 hover:opacity-75 transition-opacity">
-              L10n
+              Lokalit
             </Link>
             <span className="text-zinc-300">/</span>
             <Link href={`/projects/${slug}`} className="text-sm font-medium text-zinc-700 hover:opacity-75 transition-opacity">

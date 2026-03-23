@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import User from "@/models/User";
 import Account from "@/models/Account";
+import AccountMembership from "@/models/AccountMembership";
+import UserPreference from "@/models/UserPreference";
 
 function toSlug(value: string): string {
   return value
@@ -49,10 +50,20 @@ export async function POST(req: NextRequest) {
     const account = await Account.create({
       account_id: slug,
       name: accountName.trim(),
-      ownerId: session.userId,
     });
 
-    await User.findByIdAndUpdate(session.userId, { accountId: account._id });
+    await AccountMembership.create({
+      accountId: account._id,
+      userSub: session.userId,
+      role: "OWNER",
+    });
+
+    // Set as default account if the user has no preference yet
+    await UserPreference.updateOne(
+      { userSub: session.userId },
+      { $setOnInsert: { userSub: session.userId, defaultAccountId: account._id } },
+      { upsert: true }
+    );
 
     session.accountId = account._id.toString();
     session.accountSlug = slug;

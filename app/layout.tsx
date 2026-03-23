@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "L10n — Localization Management",
+  title: "Lokalit — Localization Management",
   description: "Internal localization management platform for managing translations across multiple platforms and languages.",
 };
 
