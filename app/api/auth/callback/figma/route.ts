@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
-import OAuthIntegration from "@/models/OAuthIntegration";
+import { db } from "@/lib/db";
 
 async function handleCallback(req: NextRequest) {
   let code: string | null;
@@ -13,7 +12,6 @@ async function handleCallback(req: NextRequest) {
     state = body?.get("state")?.toString() ?? null;
     error = body?.get("error")?.toString() ?? null;
 
-    // Supabase may also POST with a JSON body
     if (!code && !state) {
       const json = await req.json().catch(() => null) as Record<string, string> | null;
       code = json?.code ?? null;
@@ -35,10 +33,11 @@ async function handleCallback(req: NextRequest) {
     return NextResponse.redirect(new URL("/auth/figma/error", req.url), 303);
   }
 
-  await connectDB();
-
   try {
-    await OAuthIntegration.create({ key: "figma", requestId: state, code });
+    await db
+      .schema("apps_lokalit")
+      .from("oauth_integrations")
+      .insert({ key: "figma", request_id: state, code });
   } catch {
     // Duplicate request_id — ignore, the plugin will pick up the first one
   }

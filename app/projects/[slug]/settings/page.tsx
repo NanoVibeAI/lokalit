@@ -1,8 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
-import { connectDB } from "@/lib/db";
-import Project from "@/models/Project";
+import { db } from "@/lib/db";
 import LogoutButton from "@/app/home/LogoutButton";
 import ProjectSettingsForm from "./ProjectSettingsForm";
 
@@ -17,8 +16,12 @@ export default async function ProjectSettingsPage({
   if (!session.isLoggedIn) redirect("/api/auth/login");
   if (!session.accountId) redirect("/onboarding");
 
-  await connectDB();
-  const project = await Project.findOne({ slug }).lean();
+  const { data: project } = await db
+    .schema("apps_lokalit")
+    .from("projects")
+    .select("*")
+    .eq("slug", slug)
+    .maybeSingle();
   if (!project) notFound();
 
   return (
@@ -58,8 +61,8 @@ export default async function ProjectSettingsPage({
             currentSlug={slug}
             initialName={project.name}
             initialSlug={project.slug}
-            initialDefaultLanguage={project.defaultLanguage}
-            initialOtherLanguages={project.otherLanguages ?? []}
+            initialDefaultLanguage={project.default_language}
+            initialOtherLanguages={project.other_languages ?? []}
           />
         </div>
       </main>

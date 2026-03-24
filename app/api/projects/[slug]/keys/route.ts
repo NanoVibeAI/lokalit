@@ -1,33 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
+import { db } from "@/lib/db";
 import { withAuth } from "@/lib/auth";
-import Project from "@/models/Project";
-import LocalizationKey from "@/models/LocalizationKey";
 
 export const GET = withAuth<{ params: Promise<{ slug: string }> }>(
   async (req, { params }, _auth) => {
     try {
       const { slug } = await params;
-      await connectDB();
 
-      const project = await Project.findOne({ slug }).lean();
+      const { data: project } = await db
+        .schema("apps_lokalit")
+        .from("projects")
+        .select("id")
+        .eq("slug", slug)
+        .maybeSingle();
+
       if (!project) {
-        return NextResponse.json(
-          { message: "Project not found." },
-          { status: 404 },
-        );
+        return NextResponse.json({ message: "Project not found." }, { status: 404 });
       }
 
-      const keys = await LocalizationKey.find({ projectId: project._id })
-        .sort({ key: 1 })
-        .lean();
+      const { data: keys, error } = await db
+        .schema("apps_lokalit")
+        .from("localization_keys")
+        .select("*")
+        .eq("project_id", project.id)
+        .order("key", { ascending: true });
 
-      return NextResponse.json({ keys });
+      if (error) throw error;
+
+      return NextResponse.json({ keys: keys ?? [] });
     } catch {
-      return NextResponse.json(
-        { message: "Internal server error." },
-        { status: 500 },
-      );
+      return NextResponse.json({ message: "Internal server error." }, { status: 500 });
     }
   },
 );
@@ -39,46 +41,52 @@ export const POST = withAuth<{ params: Promise<{ slug: string }> }>(
       const { key, description } = await req.json();
 
       if (!key || typeof key !== "string" || !key.trim()) {
-        return NextResponse.json(
-          { message: "Key name is required." },
-          { status: 400 },
-        );
+        return NextResponse.json({ message: "Key name is required." }, { status: 400 });
       }
 
-      await connectDB();
+      const { data: project } = await db
+        .schema("apps_lokalit")
+        .from("projects")
+        .select("id")
+        .eq("slug", slug)
+        .maybeSingle();
 
-      const project = await Project.findOne({ slug }).lean();
       if (!project) {
-        return NextResponse.json(
-          { message: "Project not found." },
-          { status: 404 },
-        );
+        return NextResponse.json({ message: "Project not found." }, { status: 404 });
       }
 
-      const existing = await LocalizationKey.findOne({
-        projectId: project._id,
-        key: key.trim(),
-      });
+      const { data: existing } = await db
+        .schema("apps_lokalit")
+        .from("localization_keys")
+        .select("id")
+        .eq("project_id", project.id)
+        .eq("key", key.trim())
+        .maybeSingle();
+
       if (existing) {
         return NextResponse.json(
           { message: `Key "${key.trim()}" already exists.` },
-          { status: 409 },
+          { status: 409 }
         );
       }
 
-      const locKey = await LocalizationKey.create({
-        projectId: project._id,
-        key: key.trim(),
-        description: typeof description === "string" ? description.trim() : "",
-        values: {},
-      });
+      const { data: locKey, error } = await db
+        .schema("apps_lokalit")
+        .from("localization_keys")
+        .insert({
+          project_id: project.id,
+          key: key.trim(),
+          description: typeof description === "string" ? description.trim() : "",
+          values: {},
+        })
+        .select()
+        .single();
+
+      if (error || !locKey) throw error;
 
       return NextResponse.json({ key: locKey }, { status: 201 });
     } catch {
-      return NextResponse.json(
-        { message: "Internal server error." },
-        { status: 500 },
-      );
+      return NextResponse.json({ message: "Internal server error." }, { status: 500 });
     }
   },
 );

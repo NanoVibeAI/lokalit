@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
+import { db } from "@/lib/db";
 import { withAuth } from "@/lib/auth";
-import Project from "@/models/Project";
-import ProjectMembership from "@/models/ProjectMembership";
 
 function toSlug(value: string): string {
   return value
@@ -26,7 +24,6 @@ export const POST = withAuth(async (req, _context, auth) => {
     }
 
     const slug = rawSlug ? toSlug(String(rawSlug).trim()) : toSlug(name.trim());
-
     const cleanedOtherLanguages = Array.isArray(otherLanguages)
       ? otherLanguages.filter((l): l is string => typeof l === "string" && l.trim() !== "")
       : [];
@@ -38,9 +35,13 @@ export const POST = withAuth(async (req, _context, auth) => {
       );
     }
 
-    await connectDB();
+    const { data: existing } = await db
+      .schema("apps_lokalit")
+      .from("projects")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
 
-    const existing = await Project.findOne({ slug });
     if (existing) {
       return NextResponse.json(
         { message: `A project with the slug "${slug}" already exists.` },
@@ -48,13 +49,24 @@ export const POST = withAuth(async (req, _context, auth) => {
       );
     }
 
-    const project = await Project.create({ name: name.trim(), slug, defaultLanguage, otherLanguages: cleanedOtherLanguages });
+    const { data: project, error } = await db
+      .schema("apps_lokalit")
+      .from("projects")
+      .insert({
+        name: name.trim(),
+        slug,
+        default_language: defaultLanguage,
+        other_languages: cleanedOtherLanguages,
+      })
+      .select()
+      .single();
 
-    await ProjectMembership.create({
-      projectId: project._id,
-      userSub: auth.userId,
-      role: "OWNER",
-    });
+    if (error || !project) throw error;
+
+    await db
+      .schema("apps_lokalit")
+      .from("project_memberships")
+      .insert({ project_id: project.id, user_sub: auth.userId, role: "OWNER" });
 
     return NextResponse.json({ message: "Project created.", project }, { status: 201 });
   } catch {
@@ -69,9 +81,13 @@ export const GET = withAuth(async (req, _context, _auth) => {
       return NextResponse.json({ message: "Slug is required." }, { status: 400 });
     }
 
-    await connectDB();
+    const { data: existing } = await db
+      .schema("apps_lokalit")
+      .from("projects")
+      .select("id")
+      .eq("slug", slug.trim())
+      .maybeSingle();
 
-    const existing = await Project.findOne({ slug: slug.trim() });
     return NextResponse.json({ available: !existing });
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });

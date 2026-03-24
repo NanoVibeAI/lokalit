@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
+import { db } from "@/lib/db";
 import { withAuth } from "@/lib/auth";
-import Project from "@/models/Project";
-import LocalizationKey from "@/models/LocalizationKey";
 
 export const POST = withAuth<{ params: Promise<{ slug: string }> }>(async (req, { params }, _auth) => {
   try {
@@ -13,38 +11,66 @@ export const POST = withAuth<{ params: Promise<{ slug: string }> }>(async (req, 
       return NextResponse.json({ message: "Invalid payload: keys must be an array." }, { status: 400 });
     }
 
-    await connectDB();
+    const { data: project } = await db
+      .schema("apps_lokalit")
+      .from("projects")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
 
-    const project = await Project.findOne({ slug }).lean();
     if (!project) {
       return NextResponse.json({ message: "Project not found." }, { status: 404 });
     }
 
     const results = [];
+
     for (const item of keys) {
       if (!item.key || typeof item.key !== "string") continue;
 
-      // Upsert: Find by projectId and key, update specific nested values
-      const updateData: Record<string, string> = {};
-      if (item.values) {
-        Object.entries(item.values).forEach(([lang, val]) => {
-          updateData[`values.${lang}`] = val as string;
-        });
+      const keyName = item.key.trim();
+      const incomingValues: Record<string, string> = {};
+      if (item.values && typeof item.values === "object") {
+        for (const [lang, val] of Object.entries(item.values)) {
+          incomingValues[lang] = String(val);
+        }
       }
 
-      const locKey = await LocalizationKey.findOneAndUpdate(
-        { projectId: project._id, key: item.key.trim() },
-        { 
-          $set: updateData
-        },
-        { upsert: true, new: true, runValidators: true }
-      );
-      results.push(locKey);
+      // Fetch existing to merge JSONB values (equivalent to MongoDB $set dot-notation)
+      const { data: existing } = await db
+        .schema("apps_lokalit")
+        .from("localization_keys")
+        .select("id, values")
+        .eq("project_id", project.id)
+        .eq("key", keyName)
+        .maybeSingle();
+
+      let upserted;
+      if (existing) {
+        const mergedValues = { ...(existing.values as Record<string, string>), ...incomingValues };
+        const { data } = await db
+          .schema("apps_lokalit")
+          .from("localization_keys")
+          .update({ values: mergedValues, updated_at: new Date().toISOString() })
+          .eq("id", existing.id)
+          .select()
+          .single();
+        upserted = data;
+      } else {
+        const { data } = await db
+          .schema("apps_lokalit")
+          .from("localization_keys")
+          .insert({ project_id: project.id, key: keyName, description: "", values: incomingValues })
+          .select()
+          .single();
+        upserted = data;
+      }
+
+      if (upserted) results.push(upserted);
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: `Successfully synced ${results.length} keys.`,
-      keys: results 
+      keys: results,
     });
   } catch (err) {
     console.error("[Bulk Sync Error]:", err);

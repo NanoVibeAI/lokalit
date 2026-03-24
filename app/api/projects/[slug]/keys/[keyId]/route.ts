@@ -1,30 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import mongoose from "mongoose";
-import { connectDB } from "@/lib/db";
+import { db } from "@/lib/db";
 import { withAuth } from "@/lib/auth";
-import Project from "@/models/Project";
-import LocalizationKey from "@/models/LocalizationKey";
 
 export const PATCH = withAuth<{ params: Promise<{ slug: string; keyId: string }> }>(async (req, { params }, _auth) => {
   try {
     const { slug, keyId } = await params;
-
-    if (!mongoose.Types.ObjectId.isValid(keyId)) {
-      return NextResponse.json({ message: "Invalid key ID." }, { status: 400 });
-    }
-
     const body = await req.json();
-    await connectDB();
 
-    const project = await Project.findOne({ slug }).lean();
+    const { data: project } = await db
+      .schema("apps_lokalit")
+      .from("projects")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
+
     if (!project) {
       return NextResponse.json({ message: "Project not found." }, { status: 404 });
     }
 
-    const locKey = await LocalizationKey.findOne({ _id: keyId, projectId: project._id });
+    const { data: locKey } = await db
+      .schema("apps_lokalit")
+      .from("localization_keys")
+      .select("*")
+      .eq("id", keyId)
+      .eq("project_id", project.id)
+      .maybeSingle();
+
     if (!locKey) {
       return NextResponse.json({ message: "Key not found." }, { status: 404 });
     }
+
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
     // Bulk replace entire values object
     if (body.values !== undefined) {
@@ -35,24 +41,22 @@ export const PATCH = withAuth<{ params: Promise<{ slug: string; keyId: string }>
       for (const [k, v] of Object.entries(body.values as Record<string, unknown>)) {
         cleaned[String(k).trim()] = String(v ?? "");
       }
-      locKey.values = cleaned;
-      locKey.markModified("values");
+      patch.values = cleaned;
     }
 
-    // Set or clear a single language value
+    // Set or remove a single language value  (uses jsonb_set via object spread)
     if (body.lang !== undefined) {
       const lang = String(body.lang).trim();
       if (!lang) {
         return NextResponse.json({ message: "Language is required." }, { status: 400 });
       }
+      const currentValues = { ...(locKey.values as Record<string, string>) };
       if (body.remove === true) {
-        const updated = { ...locKey.values };
-        delete updated[lang];
-        locKey.values = updated;
+        delete currentValues[lang];
       } else {
-        locKey.values = { ...locKey.values, [lang]: String(body.value ?? "") };
+        currentValues[lang] = String(body.value ?? "");
       }
-      locKey.markModified("values");
+      patch.values = currentValues;
     }
 
     // Rename key
@@ -61,24 +65,37 @@ export const PATCH = withAuth<{ params: Promise<{ slug: string; keyId: string }>
       if (!newKey) {
         return NextResponse.json({ message: "Key name is required." }, { status: 400 });
       }
-      const conflict = await LocalizationKey.findOne({
-        projectId: project._id,
-        key: newKey,
-        _id: { $ne: keyId },
-      });
+      const { data: conflict } = await db
+        .schema("apps_lokalit")
+        .from("localization_keys")
+        .select("id")
+        .eq("project_id", project.id)
+        .eq("key", newKey)
+        .neq("id", keyId)
+        .maybeSingle();
+
       if (conflict) {
         return NextResponse.json({ message: `Key "${newKey}" already exists.` }, { status: 409 });
       }
-      locKey.key = newKey;
+      patch.key = newKey;
     }
 
     // Update description
     if (body.description !== undefined) {
-      locKey.description = String(body.description).trim();
+      patch.description = String(body.description).trim();
     }
 
-    await locKey.save();
-    return NextResponse.json({ key: locKey });
+    const { data: updated, error } = await db
+      .schema("apps_lokalit")
+      .from("localization_keys")
+      .update(patch)
+      .eq("id", keyId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json({ key: updated });
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });
   }
@@ -88,19 +105,27 @@ export const DELETE = withAuth<{ params: Promise<{ slug: string; keyId: string }
   try {
     const { slug, keyId } = await params;
 
-    if (!mongoose.Types.ObjectId.isValid(keyId)) {
-      return NextResponse.json({ message: "Invalid key ID." }, { status: 400 });
-    }
+    const { data: project } = await db
+      .schema("apps_lokalit")
+      .from("projects")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
 
-    await connectDB();
-
-    const project = await Project.findOne({ slug }).lean();
     if (!project) {
       return NextResponse.json({ message: "Project not found." }, { status: 404 });
     }
 
-    const result = await LocalizationKey.deleteOne({ _id: keyId, projectId: project._id });
-    if (result.deletedCount === 0) {
+    const { error, count } = await db
+      .schema("apps_lokalit")
+      .from("localization_keys")
+      .delete({ count: "exact" })
+      .eq("id", keyId)
+      .eq("project_id", project.id);
+
+    if (error) throw error;
+
+    if (!count || count === 0) {
       return NextResponse.json({ message: "Key not found." }, { status: 404 });
     }
 

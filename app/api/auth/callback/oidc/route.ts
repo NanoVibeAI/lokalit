@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
+import { db } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import Account from "@/models/Account";
-import AccountMembership from "@/models/AccountMembership";
-import UserPreference from "@/models/UserPreference";
 
 interface TokenResponse {
   access_token: string;
@@ -46,13 +43,11 @@ async function handleCallback(req: NextRequest) {
     return NextResponse.redirect(loginUrl, 303);
   }
 
-  // TODO: re-enable PKCE state validation once cookie/session persistence is confirmed
   const session = await getSession();
   const codeVerifier = session.pkceVerifier ?? "";
 
   console.log("[oidc callback] pkceVerifier present:", !!session.pkceVerifier, "pkceState:", session.pkceState, "incoming state:", state);
 
-  // Clear PKCE values from session
   session.pkceState = undefined;
   session.pkceVerifier = undefined;
   await session.save();
@@ -62,6 +57,7 @@ async function handleCallback(req: NextRequest) {
   const basicAuth = Buffer.from(
     `${process.env.OIDC_CLIENT_ID ?? ""}:${process.env.OIDC_CLIENT_SECRET ?? ""}`
   ).toString("base64");
+
   const tokenRes = await fetch(tokenEndpoint, {
     method: "POST",
     headers: {
@@ -97,11 +93,14 @@ async function handleCallback(req: NextRequest) {
     return NextResponse.redirect(loginUrl, 303);
   }
 
-  await connectDB();
+  // Check if user has any account memberships
+  const { data: memberships } = await db
+    .schema("apps_lokalit")
+    .from("account_memberships")
+    .select("id, account_id")
+    .eq("user_sub", sub);
 
-  const memberships = await AccountMembership.find({ userSub: sub });
-
-  if (memberships.length === 0) {
+  if (!memberships || memberships.length === 0) {
     // No accounts yet — send to onboarding
     session.userId = sub;
     session.email = email ?? "";
@@ -111,11 +110,15 @@ async function handleCallback(req: NextRequest) {
     return NextResponse.redirect(new URL("/onboarding", req.url), 303);
   }
 
-  // Resolve the active account: prefer the stored default, fall back to first membership
-  const pref = await UserPreference.findOne({ userSub: sub });
+  // Resolve active account: prefer stored default, fall back to first membership
+  const { data: pref } = await db
+    .schema("apps_lokalit")
+    .from("user_preferences")
+    .select("default_account_id")
+    .eq("user_sub", sub)
+    .maybeSingle();
 
   if (!pref) {
-    // Has accounts but never set a preference — let user choose
     session.userId = sub;
     session.email = email ?? "";
     session.accessToken = tokens.access_token;
@@ -124,12 +127,17 @@ async function handleCallback(req: NextRequest) {
     return NextResponse.redirect(new URL("/account-select", req.url), 303);
   }
 
-  const defaultId = pref.defaultAccountId?.toString();
+  const defaultId = pref.default_account_id;
   const activeMembership =
-    memberships.find((m) => !!defaultId && m.accountId.toString() === defaultId) ??
+    (defaultId ? memberships.find((m) => m.account_id === defaultId) : null) ??
     memberships[0];
 
-  const account = await Account.findById(activeMembership.accountId);
+  const { data: account } = await db
+    .schema("apps_lokalit")
+    .from("accounts")
+    .select("id, account_id")
+    .eq("id", activeMembership.account_id)
+    .maybeSingle();
 
   if (!account) {
     // Stale membership — account document was deleted; let user choose
@@ -144,7 +152,7 @@ async function handleCallback(req: NextRequest) {
   session.userId = sub;
   session.email = email ?? "";
   session.accessToken = tokens.access_token;
-  session.accountId = account._id.toString();
+  session.accountId = account.id;
   session.accountSlug = account.account_id;
   session.isLoggedIn = true;
   await session.save();

@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { connectDB } from "@/lib/db";
-import AccountMembership from "@/models/AccountMembership";
+import { db } from "@/lib/db";
 import OnboardingForm from "./OnboardingForm";
 
 export default async function OnboardingPage() {
@@ -11,10 +10,13 @@ export default async function OnboardingPage() {
     redirect("/api/auth/login");
   }
 
-  await connectDB();
-  const membershipCount = await AccountMembership.countDocuments({ userSub: session.userId });
+  const { count } = await db
+    .schema("apps_lokalit")
+    .from("account_memberships")
+    .select("*", { count: "exact", head: true })
+    .eq("user_sub", session.userId!);
 
-  if (membershipCount > 0) {
+  if ((count ?? 0) > 0) {
     redirect("/account-select");
   }
 

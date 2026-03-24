@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
+import { db } from "@/lib/db";
 import { withAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
-import Account from "@/models/Account";
-import AccountMembership from "@/models/AccountMembership";
-import UserPreference from "@/models/UserPreference";
 
 function toSlug(value: string): string {
   return value
@@ -32,9 +29,14 @@ export const POST = withAuth(async (req, _context, auth) => {
       );
     }
 
-    await connectDB();
+    // Check uniqueness
+    const { data: existing } = await db
+      .schema("apps_lokalit")
+      .from("accounts")
+      .select("id")
+      .eq("account_id", slug)
+      .maybeSingle();
 
-    const existing = await Account.findOne({ account_id: slug });
     if (existing) {
       return NextResponse.json(
         { message: "That organization name is already taken. Please choose another." },
@@ -42,27 +44,36 @@ export const POST = withAuth(async (req, _context, auth) => {
       );
     }
 
-    const account = await Account.create({
-      account_id: slug,
-      name: accountName.trim(),
-    });
+    // Create account
+    const { data: account, error: accountError } = await db
+      .schema("apps_lokalit")
+      .from("accounts")
+      .insert({ account_id: slug, name: accountName.trim() })
+      .select()
+      .single();
 
-    await AccountMembership.create({
-      accountId: account._id,
-      userSub: auth.userId,
-      role: "OWNER",
-    });
+    if (accountError || !account) {
+      throw accountError;
+    }
 
-    // Set as default account if the user has no preference yet
-    await UserPreference.updateOne(
-      { userSub: auth.userId },
-      { $setOnInsert: { userSub: auth.userId, defaultAccountId: account._id } },
-      { upsert: true }
-    );
+    // Create OWNER membership
+    await db
+      .schema("apps_lokalit")
+      .from("account_memberships")
+      .insert({ account_id: account.id, user_sub: auth.userId, role: "OWNER" });
+
+    // Set as default account if user has no preference yet
+    await db
+      .schema("apps_lokalit")
+      .from("user_preferences")
+      .upsert(
+        { user_sub: auth.userId, default_account_id: account.id },
+        { onConflict: "user_sub", ignoreDuplicates: true }
+      );
 
     // Persist to session for web clients
     const session = await getSession();
-    session.accountId = account._id.toString();
+    session.accountId = account.id;
     session.accountSlug = slug;
     await session.save();
 

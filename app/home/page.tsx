@@ -1,23 +1,29 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
-import { connectDB } from "@/lib/db";
-import Project, { IProject } from "@/models/Project";
-import ProjectMembership from "@/models/ProjectMembership";
+import { db } from "@/lib/db";
+import type { Project } from "@/lib/types";
 import LogoutButton from "./LogoutButton";
 import NewProjectDialog from "./NewProjectDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Settings2Icon } from "lucide-react";
 
-async function getProjects(userSub: string): Promise<Pick<IProject, "_id" | "name" | "slug" | "description" | "defaultLanguage" | "createdAt">[]> {
-  await connectDB();
-  const memberships = await ProjectMembership.find({ userSub }, "projectId").lean();
-  const projectIds = memberships.map((m) => m.projectId);
-  const projects = await Project.find({ _id: { $in: projectIds } }, "name slug description defaultLanguage createdAt")
-    .sort({ createdAt: -1 })
-    .lean();
-  return projects as never;
+async function getProjects(userSub: string): Promise<Pick<Project, "id" | "name" | "slug" | "description" | "default_language" | "created_at">[]> {
+  const { data: memberships } = await db
+    .schema("apps_lokalit")
+    .from("project_memberships")
+    .select("project_id")
+    .eq("user_sub", userSub);
+  const projectIds = (memberships ?? []).map((m) => m.project_id);
+  if (projectIds.length === 0) return [];
+  const { data: projects } = await db
+    .schema("apps_lokalit")
+    .from("projects")
+    .select("id, name, slug, description, default_language, created_at")
+    .in("id", projectIds)
+    .order("created_at", { ascending: false });
+  return projects ?? [];
 }
 
 export default async function HomePage() {
@@ -68,7 +74,7 @@ export default async function HomePage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map((project) => (
-              <ProjectCard key={String(project._id)} project={project} />
+              <ProjectCard key={project.id} project={project} />
             ))}
           </div>
         )}
@@ -80,7 +86,7 @@ export default async function HomePage() {
 function ProjectCard({
   project,
 }: {
-  project: Pick<IProject, "_id" | "name" | "slug" | "description" | "defaultLanguage" | "createdAt">;
+  project: Pick<Project, "id" | "name" | "slug" | "description" | "default_language" | "created_at">;
 }) {
   return (
     <Card className="hover:shadow-md transition-shadow">
