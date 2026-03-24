@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
-import { getSession } from "@/lib/session";
+import { withAuth } from "@/lib/auth";
 import Project from "@/models/Project";
 
 function toSlug(value: string): string {
@@ -12,16 +12,8 @@ function toSlug(value: string): string {
     .replaceAll(/-+/g, "-");
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
+export const PATCH = withAuth<{ params: Promise<{ slug: string }> }>(async (req, { params }, _auth) => {
   try {
-    const session = await getSession();
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-    }
-
     const { slug: currentSlug } = await params;
     const { name, slug: rawSlug, defaultLanguage, otherLanguages } = await req.json();
 
@@ -74,4 +66,4 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });
   }
-}
+});

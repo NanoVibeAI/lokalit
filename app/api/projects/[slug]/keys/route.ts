@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
-import { getSession } from "@/lib/session";
+import { withAuth } from "@/lib/auth";
 import Project from "@/models/Project";
 import LocalizationKey from "@/models/LocalizationKey";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
+export const GET = withAuth<{ params: Promise<{ slug: string }> }>(async (req, { params }, _auth) => {
   try {
-    const session = await getSession();
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-    }
-
     const { slug } = await params;
     await connectDB();
 
@@ -30,18 +22,10 @@ export async function GET(
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });
   }
-}
+});
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
+export const POST = withAuth<{ params: Promise<{ slug: string }> }>(async (req, { params }, _auth) => {
   try {
-    const session = await getSession();
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-    }
-
     const { slug } = await params;
     const { key, description } = await req.json();
 
@@ -72,4 +56,4 @@ export async function POST(
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });
   }
-}
+});

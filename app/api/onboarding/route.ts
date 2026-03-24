@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
+import { withAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import Account from "@/models/Account";
 import AccountMembership from "@/models/AccountMembership";
@@ -14,14 +15,8 @@ function toSlug(value: string): string {
     .replaceAll(/-+/g, "-");
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withAuth(async (req, _context, auth) => {
   try {
-    const session = await getSession();
-
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-    }
-
     const { accountName } = await req.json();
 
     if (!accountName || typeof accountName !== "string" || !accountName.trim()) {
@@ -54,17 +49,19 @@ export async function POST(req: NextRequest) {
 
     await AccountMembership.create({
       accountId: account._id,
-      userSub: session.userId,
+      userSub: auth.userId,
       role: "OWNER",
     });
 
     // Set as default account if the user has no preference yet
     await UserPreference.updateOne(
-      { userSub: session.userId },
-      { $setOnInsert: { userSub: session.userId, defaultAccountId: account._id } },
+      { userSub: auth.userId },
+      { $setOnInsert: { userSub: auth.userId, defaultAccountId: account._id } },
       { upsert: true }
     );
 
+    // Persist to session for web clients
+    const session = await getSession();
     session.accountId = account._id.toString();
     session.accountSlug = slug;
     await session.save();
@@ -76,4 +73,4 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });
   }
-}
+});

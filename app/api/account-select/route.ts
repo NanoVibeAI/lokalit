@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
+import { withAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import Account from "@/models/Account";
 import AccountMembership from "@/models/AccountMembership";
 import UserPreference from "@/models/UserPreference";
 
-export async function POST(req: NextRequest) {
+export const POST = withAuth(async (req, _context, auth) => {
   try {
-    const session = await getSession();
-
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-    }
-
     const { accountId, setAsDefault } = await req.json();
 
     if (!accountId || typeof accountId !== "string") {
@@ -23,7 +18,7 @@ export async function POST(req: NextRequest) {
 
     // Verify the user actually has access to this account
     const membership = await AccountMembership.findOne({
-      userSub: session.userId,
+      userSub: auth.userId,
       accountId,
     });
 
@@ -39,12 +34,14 @@ export async function POST(req: NextRequest) {
 
     if (setAsDefault) {
       await UserPreference.updateOne(
-        { userSub: session.userId },
-        { $set: { userSub: session.userId, defaultAccountId: account._id } },
+        { userSub: auth.userId },
+        { $set: { userSub: auth.userId, defaultAccountId: account._id } },
         { upsert: true }
       );
     }
 
+    // Persist to session for web clients
+    const session = await getSession();
     session.accountId = account._id.toString();
     session.accountSlug = account.account_id;
     await session.save();
@@ -53,4 +50,4 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });
   }
-}
+});

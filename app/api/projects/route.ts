@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
-import { getSession } from "@/lib/session";
+import { withAuth } from "@/lib/auth";
 import Project from "@/models/Project";
 import ProjectMembership from "@/models/ProjectMembership";
 
@@ -13,14 +13,8 @@ function toSlug(value: string): string {
     .replaceAll(/-+/g, "-");
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withAuth(async (req, _context, auth) => {
   try {
-    const session = await getSession();
-
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-    }
-
     const { name, slug: rawSlug, defaultLanguage, otherLanguages } = await req.json();
 
     if (!name || typeof name !== "string" || !name.trim()) {
@@ -58,7 +52,7 @@ export async function POST(req: NextRequest) {
 
     await ProjectMembership.create({
       projectId: project._id,
-      userSub: session.userId,
+      userSub: auth.userId,
       role: "OWNER",
     });
 
@@ -66,15 +60,10 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });
   }
-}
+});
 
-export async function GET(req: NextRequest) {
+export const GET = withAuth(async (req, _context, _auth) => {
   try {
-    const session = await getSession();
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-    }
-
     const slug = req.nextUrl.searchParams.get("slug");
     if (!slug?.trim()) {
       return NextResponse.json({ message: "Slug is required." }, { status: 400 });
@@ -87,4 +76,4 @@ export async function GET(req: NextRequest) {
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });
   }
-}
+});

@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/db";
-import { getSession } from "@/lib/session";
+import { withAuth } from "@/lib/auth";
 import Project from "@/models/Project";
 import LocalizationKey from "@/models/LocalizationKey";
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string; keyId: string }> }
-) {
+export const PATCH = withAuth<{ params: Promise<{ slug: string; keyId: string }> }>(async (req, { params }, _auth) => {
   try {
-    const session = await getSession();
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-    }
-
     const { slug, keyId } = await params;
 
     if (!mongoose.Types.ObjectId.isValid(keyId)) {
@@ -90,18 +82,10 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });
   }
-}
+});
 
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ slug: string; keyId: string }> }
-) {
+export const DELETE = withAuth<{ params: Promise<{ slug: string; keyId: string }> }>(async (req, { params }, _auth) => {
   try {
-    const session = await getSession();
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-    }
-
     const { slug, keyId } = await params;
 
     if (!mongoose.Types.ObjectId.isValid(keyId)) {
@@ -124,4 +108,4 @@ export async function DELETE(
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });
   }
-}
+});
