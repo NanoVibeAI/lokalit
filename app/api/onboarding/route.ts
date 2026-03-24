@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
+import { db } from "@/lib/db";
+import { withAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
-import Account from "@/models/Account";
-import AccountMembership from "@/models/AccountMembership";
-import UserPreference from "@/models/UserPreference";
 
 function toSlug(value: string): string {
   return value
@@ -14,14 +12,8 @@ function toSlug(value: string): string {
     .replaceAll(/-+/g, "-");
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withAuth(async (req, _context, auth) => {
   try {
-    const session = await getSession();
-
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-    }
-
     const { accountName } = await req.json();
 
     if (!accountName || typeof accountName !== "string" || !accountName.trim()) {
@@ -37,9 +29,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await connectDB();
+    // Check uniqueness
+    const { data: existing } = await db
+      .schema("apps_lokalit")
+      .from("accounts")
+      .select("id")
+      .eq("account_id", slug)
+      .maybeSingle();
 
-    const existing = await Account.findOne({ account_id: slug });
     if (existing) {
       return NextResponse.json(
         { message: "That organization name is already taken. Please choose another." },
@@ -47,25 +44,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const account = await Account.create({
-      account_id: slug,
-      name: accountName.trim(),
-    });
+    // Create account
+    const { data: account, error: accountError } = await db
+      .schema("apps_lokalit")
+      .from("accounts")
+      .insert({ account_id: slug, name: accountName.trim() })
+      .select()
+      .single();
 
-    await AccountMembership.create({
-      accountId: account._id,
-      userSub: session.userId,
-      role: "OWNER",
-    });
+    if (accountError || !account) {
+      throw accountError;
+    }
 
-    // Set as default account if the user has no preference yet
-    await UserPreference.updateOne(
-      { userSub: session.userId },
-      { $setOnInsert: { userSub: session.userId, defaultAccountId: account._id } },
-      { upsert: true }
-    );
+    // Create OWNER membership
+    await db
+      .schema("apps_lokalit")
+      .from("account_memberships")
+      .insert({ account_id: account.id, user_sub: auth.userId, role: "OWNER" });
 
-    session.accountId = account._id.toString();
+    // Set as default account if user has no preference yet
+    await db
+      .schema("apps_lokalit")
+      .from("user_preferences")
+      .upsert(
+        { user_sub: auth.userId, default_account_id: account.id },
+        { onConflict: "user_sub", ignoreDuplicates: true }
+      );
+
+    // Persist to session for web clients
+    const session = await getSession();
+    session.accountId = account.id;
     session.accountSlug = slug;
     await session.save();
 
@@ -76,4 +84,4 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });
   }
-}
+});

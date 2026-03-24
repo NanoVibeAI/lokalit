@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
-import { getSession } from "@/lib/session";
-import Project from "@/models/Project";
+import { db } from "@/lib/db";
+import { withAuth } from "@/lib/auth";
 
 function toSlug(value: string): string {
   return value
@@ -12,16 +11,8 @@ function toSlug(value: string): string {
     .replaceAll(/-+/g, "-");
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
+export const PATCH = withAuth<{ params: Promise<{ slug: string }> }>(async (req, { params }, _auth) => {
   try {
-    const session = await getSession();
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-    }
-
     const { slug: currentSlug } = await params;
     const { name, slug: rawSlug, defaultLanguage, otherLanguages } = await req.json();
 
@@ -46,16 +37,26 @@ export async function PATCH(
       );
     }
 
-    await connectDB();
+    const { data: project } = await db
+      .schema("apps_lokalit")
+      .from("projects")
+      .select("id")
+      .eq("slug", currentSlug)
+      .maybeSingle();
 
-    const project = await Project.findOne({ slug: currentSlug });
     if (!project) {
       return NextResponse.json({ message: "Project not found." }, { status: 404 });
     }
 
     // Check slug uniqueness only if it changed
     if (newSlug !== currentSlug) {
-      const conflict = await Project.findOne({ slug: newSlug });
+      const { data: conflict } = await db
+        .schema("apps_lokalit")
+        .from("projects")
+        .select("id")
+        .eq("slug", newSlug)
+        .maybeSingle();
+
       if (conflict) {
         return NextResponse.json(
           { message: `A project with the slug "${newSlug}" already exists.` },
@@ -64,14 +65,24 @@ export async function PATCH(
       }
     }
 
-    const updated = await Project.findByIdAndUpdate(
-      project._id,
-      { $set: { name: name.trim(), slug: newSlug, defaultLanguage, otherLanguages: cleanedOtherLanguages } },
-      { new: true, runValidators: true }
-    );
+    const { data: updated, error } = await db
+      .schema("apps_lokalit")
+      .from("projects")
+      .update({
+        name: name.trim(),
+        slug: newSlug,
+        default_language: defaultLanguage,
+        other_languages: cleanedOtherLanguages,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", project.id)
+      .select("slug")
+      .single();
 
-    return NextResponse.json({ message: "Project updated.", slug: updated!.slug });
+    if (error) throw error;
+
+    return NextResponse.json({ message: "Project updated.", slug: updated.slug });
   } catch {
     return NextResponse.json({ message: "Internal server error." }, { status: 500 });
   }
-}
+});

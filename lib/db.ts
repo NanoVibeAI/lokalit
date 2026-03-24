@@ -1,22 +1,17 @@
-import mongoose from "mongoose";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "./types";
 
-const DATABASE_URL = process.env.DATABASE_URL!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-if (!DATABASE_URL) {
-  throw new Error("Please define the DATABASE_URL environment variable in .env.local");
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error("Missing Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)");
 }
 
-declare global {
-  // eslint-disable-next-line no-var
-  var _mongooseConn: Promise<typeof mongoose> | undefined;
-}
-
-let cached = global._mongooseConn;
-
-if (!cached) {
-  cached = global._mongooseConn = mongoose.connect(DATABASE_URL);
-}
-
-export async function connectDB() {
-  return cached;
-}
+/**
+ * Server-side Supabase client using the service role key.
+ * Bypasses RLS — use only in API routes and server components.
+ */
+export const db = createClient<Database>(supabaseUrl, supabaseServiceKey, {
+  auth: { persistSession: false },
+});

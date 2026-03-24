@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { connectDB } from "@/lib/db";
-import AccountMembership from "@/models/AccountMembership";
-import Account from "@/models/Account";
+import { db } from "@/lib/db";
 import AccountSelectForm, { AccountOption } from "./AccountSelectForm";
 
 export default async function AccountSelectPage() {
@@ -16,25 +14,25 @@ export default async function AccountSelectPage() {
     redirect("/home");
   }
 
-  await connectDB();
+  const { data: memberships } = await db
+    .schema("apps_lokalit")
+    .from("account_memberships")
+    .select("account_id")
+    .eq("user_sub", session.userId!);
 
-  const memberships = await AccountMembership.find(
-    { userSub: session.userId },
-    "accountId"
-  ).lean();
-
-  if (memberships.length === 0) {
+  if (!memberships || memberships.length === 0) {
     redirect("/onboarding");
   }
 
-  const accountIds = memberships.map((m) => m.accountId);
-  const accounts = await Account.find(
-    { _id: { $in: accountIds } },
-    "_id account_id name"
-  ).lean();
+  const accountIds = memberships.map((m) => m.account_id);
+  const { data: accounts } = await db
+    .schema("apps_lokalit")
+    .from("accounts")
+    .select("id, account_id, name")
+    .in("id", accountIds);
 
-  const accountOptions: AccountOption[] = accounts.map((a) => ({
-    id: String(a._id),
+  const accountOptions: AccountOption[] = (accounts ?? []).map((a) => ({
+    id: a.id,
     slug: a.account_id,
     name: a.name,
   }));

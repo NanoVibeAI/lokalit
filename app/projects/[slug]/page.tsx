@@ -1,9 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
-import { connectDB } from "@/lib/db";
-import Project from "@/models/Project";
-import LocalizationKey from "@/models/LocalizationKey";
+import { db } from "@/lib/db";
 import LogoutButton from "@/app/home/LogoutButton";
 import { Badge } from "@/components/ui/badge";
 import KeysManager, { type LocalizationKeyData } from "./KeysManager";
@@ -22,17 +20,23 @@ export default async function ProjectPage({
   if (!session.isLoggedIn) redirect("/api/auth/login");
   if (!session.accountId) redirect("/onboarding");
 
-  await connectDB();
-
-  const project = await Project.findOne({ slug }).lean();
+  const { data: project } = await db
+    .schema("apps_lokalit")
+    .from("projects")
+    .select("*")
+    .eq("slug", slug)
+    .maybeSingle();
   if (!project) notFound();
 
-  const rawKeys = await LocalizationKey.find({ projectId: project._id })
-    .sort({ key: 1 })
-    .lean();
+  const { data: rawKeys } = await db
+    .schema("apps_lokalit")
+    .from("localization_keys")
+    .select("*")
+    .eq("project_id", project.id)
+    .order("key", { ascending: true });
 
-  const initialKeys: LocalizationKeyData[] = rawKeys.map((k) => ({
-    _id: String(k._id),
+  const initialKeys: LocalizationKeyData[] = (rawKeys ?? []).map((k) => ({
+    _id: k.id,
     key: k.key,
     description: k.description ?? "",
     values: (k.values as Record<string, string>) ?? {},
@@ -53,7 +57,7 @@ export default async function ProjectPage({
             <span className="text-zinc-300">/</span>
             <span className="text-sm font-medium text-zinc-700">{project.name}</span>
             <Badge variant="outline" className="text-xs">
-              {LOCALES.find((l) => l.value === project.defaultLanguage)?.label ?? project.defaultLanguage}
+              {LOCALES.find((l) => l.value === project.default_language)?.label ?? project.default_language}
             </Badge>
           </div>
           <div className="flex items-center gap-3">
@@ -71,7 +75,7 @@ export default async function ProjectPage({
       {/* Two-panel keys manager */}
       <KeysManager
         projectSlug={slug}
-        defaultLanguage={project.defaultLanguage}
+        defaultLanguage={project.default_language}
         initialKeys={initialKeys}
       />
     </div>

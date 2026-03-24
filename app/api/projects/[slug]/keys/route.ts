@@ -1,75 +1,92 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
-import { getSession } from "@/lib/session";
-import Project from "@/models/Project";
-import LocalizationKey from "@/models/LocalizationKey";
+import { db } from "@/lib/db";
+import { withAuth } from "@/lib/auth";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
-  try {
-    const session = await getSession();
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
+export const GET = withAuth<{ params: Promise<{ slug: string }> }>(
+  async (req, { params }, _auth) => {
+    try {
+      const { slug } = await params;
+
+      const { data: project } = await db
+        .schema("apps_lokalit")
+        .from("projects")
+        .select("id")
+        .eq("slug", slug)
+        .maybeSingle();
+
+      if (!project) {
+        return NextResponse.json({ message: "Project not found." }, { status: 404 });
+      }
+
+      const { data: keys, error } = await db
+        .schema("apps_lokalit")
+        .from("localization_keys")
+        .select("*")
+        .eq("project_id", project.id)
+        .order("key", { ascending: true });
+
+      if (error) throw error;
+
+      return NextResponse.json({ keys: keys ?? [] });
+    } catch {
+      return NextResponse.json({ message: "Internal server error." }, { status: 500 });
     }
+  },
+);
 
-    const { slug } = await params;
-    await connectDB();
+export const POST = withAuth<{ params: Promise<{ slug: string }> }>(
+  async (req, { params }, _auth) => {
+    try {
+      const { slug } = await params;
+      const { key, description } = await req.json();
 
-    const project = await Project.findOne({ slug }).lean();
-    if (!project) {
-      return NextResponse.json({ message: "Project not found." }, { status: 404 });
+      if (!key || typeof key !== "string" || !key.trim()) {
+        return NextResponse.json({ message: "Key name is required." }, { status: 400 });
+      }
+
+      const { data: project } = await db
+        .schema("apps_lokalit")
+        .from("projects")
+        .select("id")
+        .eq("slug", slug)
+        .maybeSingle();
+
+      if (!project) {
+        return NextResponse.json({ message: "Project not found." }, { status: 404 });
+      }
+
+      const { data: existing } = await db
+        .schema("apps_lokalit")
+        .from("localization_keys")
+        .select("id")
+        .eq("project_id", project.id)
+        .eq("key", key.trim())
+        .maybeSingle();
+
+      if (existing) {
+        return NextResponse.json(
+          { message: `Key "${key.trim()}" already exists.` },
+          { status: 409 }
+        );
+      }
+
+      const { data: locKey, error } = await db
+        .schema("apps_lokalit")
+        .from("localization_keys")
+        .insert({
+          project_id: project.id,
+          key: key.trim(),
+          description: typeof description === "string" ? description.trim() : "",
+          values: {},
+        })
+        .select()
+        .single();
+
+      if (error || !locKey) throw error;
+
+      return NextResponse.json({ key: locKey }, { status: 201 });
+    } catch {
+      return NextResponse.json({ message: "Internal server error." }, { status: 500 });
     }
-
-    const keys = await LocalizationKey.find({ projectId: project._id })
-      .sort({ key: 1 })
-      .lean();
-
-    return NextResponse.json({ keys });
-  } catch {
-    return NextResponse.json({ message: "Internal server error." }, { status: 500 });
-  }
-}
-
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
-  try {
-    const session = await getSession();
-    if (!session.isLoggedIn || !session.userId) {
-      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-    }
-
-    const { slug } = await params;
-    const { key, description } = await req.json();
-
-    if (!key || typeof key !== "string" || !key.trim()) {
-      return NextResponse.json({ message: "Key name is required." }, { status: 400 });
-    }
-
-    await connectDB();
-
-    const project = await Project.findOne({ slug }).lean();
-    if (!project) {
-      return NextResponse.json({ message: "Project not found." }, { status: 404 });
-    }
-
-    const existing = await LocalizationKey.findOne({ projectId: project._id, key: key.trim() });
-    if (existing) {
-      return NextResponse.json({ message: `Key "${key.trim()}" already exists.` }, { status: 409 });
-    }
-
-    const locKey = await LocalizationKey.create({
-      projectId: project._id,
-      key: key.trim(),
-      description: typeof description === "string" ? description.trim() : "",
-      values: {},
-    });
-
-    return NextResponse.json({ key: locKey }, { status: 201 });
-  } catch {
-    return NextResponse.json({ message: "Internal server error." }, { status: 500 });
-  }
-}
+  },
+);
