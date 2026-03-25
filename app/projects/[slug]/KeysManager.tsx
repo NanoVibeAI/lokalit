@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,14 +12,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Combobox,
-  ComboboxInput,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxList,
-  ComboboxItem,
-} from "@/components/ui/combobox";
 import {
   Table,
   TableBody,
@@ -42,10 +34,9 @@ export interface LocalizationKeyData {
 interface Props {
   projectSlug: string;
   defaultLanguage: string;
+  otherLanguages: string[];
   initialKeys: LocalizationKeyData[];
 }
-
-type LocaleItem = (typeof LOCALES)[number];
 
 interface TableRow {
   id: string;
@@ -62,13 +53,20 @@ function newRowId() {
   return `row-${++rowCounter}`;
 }
 
-function rowsFromKey(k: LocalizationKeyData): TableRow[] {
-  return Object.entries(k.values)
-    .sort(([a], [b]) => langLabel(a).localeCompare(langLabel(b)))
-    .map(([lang, value]) => ({ id: newRowId(), lang, value }));
+function rowsFromAllLanguages(
+  k: LocalizationKeyData,
+  defaultLanguage: string,
+  otherLanguages: string[]
+): TableRow[] {
+  const allLangs = [defaultLanguage, ...otherLanguages];
+  return allLangs.map((lang) => ({
+    id: newRowId(),
+    lang,
+    value: k.values[lang] ?? "",
+  }));
 }
 
-export default function KeysManager({ projectSlug, defaultLanguage, initialKeys }: Props) {
+export default function KeysManager({ projectSlug, defaultLanguage, otherLanguages, initialKeys }: Props) {
   const [keys, setKeys] = useState<LocalizationKeyData[]>(initialKeys);
   const [selectedKeyId, setSelectedKeyId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -127,7 +125,7 @@ export default function KeysManager({ projectSlug, defaultLanguage, initialKeys 
         return;
       }
       const updated: LocalizationKeyData = {
-        _id: data.key._id,
+        _id: data.key.id,
         key: data.key.key,
         description: data.key.description ?? "",
         values: data.key.values ?? {},
@@ -150,7 +148,7 @@ export default function KeysManager({ projectSlug, defaultLanguage, initialKeys 
   // Sync table rows when selected key changes
   useEffect(() => {
     if (selectedKey) {
-      setTableRows(rowsFromKey(selectedKey));
+      setTableRows(rowsFromAllLanguages(selectedKey, defaultLanguage, otherLanguages));
     } else {
       setTableRows([]);
     }
@@ -165,27 +163,17 @@ export default function KeysManager({ projectSlug, defaultLanguage, initialKeys 
     [keys, search]
   );
 
-  const usedLangs = useMemo(
-    () => new Set(tableRows.map((r) => r.lang).filter(Boolean)),
-    [tableRows]
-  );
-
-  const availableLocalesForRow = useCallback(
-    (rowId: string) => {
-      const rowLang = tableRows.find((r) => r.id === rowId)?.lang ?? "";
-      return LOCALES.filter((l) => l.value === rowLang || !usedLangs.has(l.value));
-    },
-    [tableRows, usedLangs]
-  );
-
   const translationCount = useMemo(
-    () => tableRows.filter((r) => r.lang.trim()).length,
+    () => tableRows.filter((r) => r.value.trim()).length,
     [tableRows]
   );
 
   const isTableValid = useMemo(
-    () => tableRows.every((r) => r.lang.trim() !== "" && r.value.trim() !== ""),
-    [tableRows]
+    () => {
+      const defaultRow = tableRows.find((r) => r.lang === defaultLanguage);
+      return !!defaultRow && defaultRow.value.trim() !== "";
+    },
+    [tableRows, defaultLanguage]
   );
 
   // --- Add Key ---
@@ -216,7 +204,7 @@ export default function KeysManager({ projectSlug, defaultLanguage, initialKeys 
         return;
       }
       const created: LocalizationKeyData = {
-        _id: data.key._id,
+        _id: data.key.id,
         key: data.key.key,
         description: data.key.description ?? "",
         values: data.key.values ?? {},
@@ -256,16 +244,8 @@ export default function KeysManager({ projectSlug, defaultLanguage, initialKeys 
   }
 
   // --- Table row actions ---
-  function handleAddRow() {
-    setTableRows((prev) => [...prev, { id: newRowId(), lang: "", value: "" }]);
-  }
-
   function handleRemoveRow(id: string) {
     setTableRows((prev) => prev.filter((r) => r.id !== id));
-  }
-
-  function handleRowLangChange(id: string, lang: string) {
-    setTableRows((prev) => prev.map((r) => (r.id === id ? { ...r, lang } : r)));
   }
 
   function handleRowValueChange(id: string, value: string) {
@@ -279,7 +259,7 @@ export default function KeysManager({ projectSlug, defaultLanguage, initialKeys 
     try {
       const values: Record<string, string> = {};
       for (const row of tableRows) {
-        if (row.lang.trim()) {
+        if (row.lang.trim() && row.value.trim()) {
           values[row.lang.trim()] = row.value;
         }
       }
@@ -294,12 +274,13 @@ export default function KeysManager({ projectSlug, defaultLanguage, initialKeys 
         return;
       }
       const updated: LocalizationKeyData = {
-        _id: data.key._id,
+        _id: data.key.id,
         key: data.key.key,
+        description: data.key.description ?? "",
         values: data.key.values ?? {},
       };
       setKeys((prev) => prev.map((k) => (k._id === updated._id ? updated : k)));
-      setTableRows(rowsFromKey(updated));
+      setTableRows(rowsFromAllLanguages(updated, defaultLanguage, otherLanguages));
       toast.success("Translations saved.");
     } catch {
       toast.error("Network error. Please try again.");
@@ -423,42 +404,21 @@ export default function KeysManager({ projectSlug, defaultLanguage, initialKeys 
                       {tableRows.length === 0 ? (
                         <TableRow className="hover:bg-transparent">
                           <TableCell colSpan={3} className="py-10 text-center text-sm text-zinc-400">
-                            No translations yet. Click “Add more” to get started.
+                            No translations yet.
                           </TableCell>
                         </TableRow>
                       ) : (
                         tableRows.map((row) => {
-                          const selectedLocale =
-                            LOCALES.find((l) => l.value === row.lang) ?? null;
-                          const rowLocales = availableLocalesForRow(row.id);
+                          const isDefault = row.lang === defaultLanguage;
                           return (
                             <TableRow key={row.id} className="group">
                               <TableCell className="pl-4 py-1.5 align-middle">
-                                <Combobox
-                                  items={rowLocales}
-                                  value={selectedLocale}
-                                  onValueChange={(val) =>
-                                    handleRowLangChange(
-                                      row.id,
-                                      (val as LocaleItem | null)?.value ?? ""
-                                    )
-                                  }
-                                  isItemEqualToValue={(item, val) =>
-                                    !!val && item.value === (val as LocaleItem).value
-                                  }
-                                >
-                                  <ComboboxInput placeholder="Select language…" />
-                                  <ComboboxContent>
-                                    <ComboboxEmpty>No language found.</ComboboxEmpty>
-                                    <ComboboxList>
-                                      {(locale: LocaleItem) => (
-                                        <ComboboxItem key={locale.value} value={locale}>
-                                          {locale.label}
-                                        </ComboboxItem>
-                                      )}
-                                    </ComboboxList>
-                                  </ComboboxContent>
-                                </Combobox>
+                                <span className="text-sm text-zinc-700">
+                                  {langLabel(row.lang)}
+                                </span>
+                                {isDefault && (
+                                  <span className="ml-2 text-xs text-zinc-400">(default)</span>
+                                )}
                               </TableCell>
                               <TableCell className="pl-2 py-1.5 align-middle">
                                 <Input
@@ -467,18 +427,21 @@ export default function KeysManager({ projectSlug, defaultLanguage, initialKeys 
                                     handleRowValueChange(row.id, e.target.value)
                                   }
                                   placeholder="Enter translation…"
+                                  className={isDefault && !row.value.trim() ? "border-red-400 focus-visible:ring-red-400" : ""}
                                 />
                               </TableCell>
                               <TableCell className="py-1.5 pr-3 align-middle">
-                                <Button
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  onClick={() => handleRemoveRow(row.id)}
-                                  title="Remove row"
-                                  className="opacity-0 group-hover:opacity-100"
-                                >
-                                  <Trash2Icon />
-                                </Button>
+                                {!isDefault && (
+                                  <Button
+                                    size="icon-sm"
+                                    variant="ghost"
+                                    onClick={() => handleRemoveRow(row.id)}
+                                    title="Remove row"
+                                    className="opacity-0 group-hover:opacity-100"
+                                  >
+                                    <Trash2Icon />
+                                  </Button>
+                                )}
                               </TableCell>
                             </TableRow>
                           );
@@ -487,17 +450,6 @@ export default function KeysManager({ projectSlug, defaultLanguage, initialKeys 
                     </TableBody>
                   </Table>
                 </div>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={handleAddRow}
-                  disabled={usedLangs.size >= LOCALES.length}
-                >
-                  <PlusIcon className="size-3.5" />
-                  Add more
-                </Button>
               </div>
             </div>
           )}

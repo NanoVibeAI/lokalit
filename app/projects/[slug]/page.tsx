@@ -75,6 +75,7 @@ export default async function ProjectPage({
       <KeysManager
         projectSlug={slug}
         defaultLanguage={project.default_language}
+        otherLanguages={project.other_languages ?? []}
         initialKeys={initialKeys}
       />
     </div>
