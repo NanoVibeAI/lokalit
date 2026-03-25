@@ -33,10 +33,6 @@ export default async function HomePage() {
     redirect("/api/auth/login");
   }
 
-  if (!session.accountId) {
-    redirect("/account-select");
-  }
-
   const projects = await getProjects(session.userId!);
 
   return (

@@ -5,7 +5,7 @@ export default async function RootPage() {
   const session = await getSession();
 
   if (session.isLoggedIn) {
-    redirect(session.accountId ? "/home" : "/onboarding");
+    redirect("/home");
   } else {
     redirect("/api/auth/login");
   }

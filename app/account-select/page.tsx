@@ -21,7 +21,7 @@ export default async function AccountSelectPage() {
     .eq("user_sub", session.userId!);
 
   if (!memberships || memberships.length === 0) {
-    redirect("/onboarding");
+    redirect("/home");
   }
 
   const accountIds = memberships.map((m) => m.account_id);
