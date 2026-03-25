@@ -1,25 +1,7 @@
 // TypeScript types for the apps_lokalit Supabase schema
 // Hand-crafted from the migration DDL
 
-export type AccountRole = "OWNER" | "ADMIN" | "MEMBER";
 export type ProjectRole = "OWNER" | "EDITOR" | "VIEWER";
-
-export interface Account {
-  id: string;
-  account_id: string;  // slug e.g. "great-eastern"
-  name: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AccountMembership {
-  id: string;
-  account_id: string;  // FK → accounts.id
-  user_sub: string;
-  role: AccountRole;
-  created_at: string;
-  updated_at: string;
-}
 
 export interface Project {
   id: string;
@@ -63,7 +45,6 @@ export interface FigmaFileMapping {
 export interface UserPreference {
   id: string;
   user_sub: string;
-  default_account_id: string | null;  // FK → accounts.id
   created_at: string;
   updated_at: string;
 }
@@ -80,8 +61,6 @@ export interface OAuthIntegration {
 export type Database = {
   apps_lokalit: {
     Tables: {
-      accounts: { Row: Account; Insert: Omit<Account, "id" | "created_at" | "updated_at">; Update: Partial<Omit<Account, "id">>; };
-      account_memberships: { Row: AccountMembership; Insert: Omit<AccountMembership, "id" | "created_at" | "updated_at">; Update: Partial<Omit<AccountMembership, "id">>; };
       projects: { Row: Project; Insert: Omit<Project, "id" | "created_at" | "updated_at">; Update: Partial<Omit<Project, "id">>; };
       project_memberships: { Row: ProjectMembership; Insert: Omit<ProjectMembership, "id" | "created_at" | "updated_at">; Update: Partial<Omit<ProjectMembership, "id">>; };
       localization_keys: { Row: LocalizationKey; Insert: Omit<LocalizationKey, "id" | "created_at" | "updated_at">; Update: Partial<Omit<LocalizationKey, "id">>; };

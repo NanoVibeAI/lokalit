@@ -5,8 +5,6 @@ export interface SessionData {
   userId?: string;
   email?: string;
   accessToken?: string;
-  accountId?: string;
-  accountSlug?: string;
   pkceState?: string;
   pkceVerifier?: string;
   isLoggedIn: boolean;

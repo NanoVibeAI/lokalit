@@ -5,8 +5,6 @@ import { getSession } from "./session";
 export interface AuthContext {
   userId: string;
   email?: string;
-  accountId?: string;
-  accountSlug?: string;
 }
 
 async function fromSession(): Promise<AuthContext | null> {
@@ -15,8 +13,6 @@ async function fromSession(): Promise<AuthContext | null> {
   return {
     userId: session.userId,
     email: session.email,
-    accountId: session.accountId,
-    accountSlug: session.accountSlug,
   };
 }
 

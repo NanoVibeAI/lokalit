@@ -17,16 +17,15 @@ Generates a PKCE verifier/challenge and `state`, stores them in the session cook
 
 ### `GET /api/auth/callback/oidc`
 ### `POST /api/auth/callback/oidc`
-OIDC redirect callback. Exchanges the authorization code for tokens, decodes the JWT, resolves the active account, and sets the session.
+OIDC redirect callback. Exchanges the authorization code for tokens, decodes the JWT, sets the authenticated session, then redirects to home.
 
 **Query / form params:** `code`, `state`, `error`
 
 **Routing logic:**
 | Condition | Redirect |
 |---|---|
-| No `AccountMembership` for this user | `/onboarding` |
-| Has memberships but no `UserPreference` | `/account-select` |
-| Has preference (or stale account) | `/home` (or `/account-select` if stale) |
+| Successful auth and token exchange | `/home` |
+| Missing `code` / `state`, token exchange failure, or invalid token claims | `/api/auth/login` |
 
 **Response:** `303 Redirect`
 
@@ -67,38 +66,6 @@ Polling endpoint used by the Figma plugin to retrieve the authorization code aft
 ```
 
 **Error:** `400 { "error": "Missing request_id" }`
-
----
-
-## Onboarding
-
-### `POST /api/onboarding`
-Creates a new Account (organization), adds the current user as `OWNER` in `AccountMembership`, upserts a `UserPreference` with this account as default (only if no preference exists yet), then sets `accountId`/`accountSlug` in the session.
-
-**Auth:** Session required (`isLoggedIn`, `userId`)
-
-**Request body:**
-```json
-{ "accountName": "My Org" }
-```
-
-**Response:** `201 { message, accountSlug }` | `409` if slug already taken
-
----
-
-## Account Selection
-
-### `POST /api/account-select`
-Switches the active session account. Optionally stores the selection as the user's default.
-
-**Auth:** Session required
-
-**Request body:**
-```json
-{ "accountId": "<ObjectId>", "setAsDefault": true }
-```
-
-**Response:** `200 { accountSlug }` | `403` if no membership | `404` if account not found
 
 ---
 

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { getSession } from "@/lib/session";
 
 interface TokenResponse {
@@ -15,6 +14,10 @@ interface OIDCClaims {
   email?: string;
 }
 
+function getFormValue(value: FormDataEntryValue | null): string | null {
+  return typeof value === "string" ? value : null;
+}
+
 function decodeJWTPayload(token: string): OIDCClaims {
   const payload = token.split(".")[1];
   return JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
@@ -27,9 +30,9 @@ async function handleCallback(req: NextRequest) {
 
   if (req.method === "POST") {
     const body = await req.formData().catch(() => null);
-    code = body?.get("code")?.toString() ?? null;
-    state = body?.get("state")?.toString() ?? null;
-    error = body?.get("error")?.toString() ?? null;
+    code = getFormValue(body?.get("code") ?? null);
+    state = getFormValue(body?.get("state") ?? null);
+    error = getFormValue(body?.get("error") ?? null);
   } else {
     const { searchParams } = req.nextUrl;
     code = searchParams.get("code");
@@ -93,67 +96,9 @@ async function handleCallback(req: NextRequest) {
     return NextResponse.redirect(loginUrl, 303);
   }
 
-  // Check if user has any account memberships
-  const { data: memberships } = await db
-    .schema("apps_lokalit")
-    .from("account_memberships")
-    .select("id, account_id")
-    .eq("user_sub", sub);
-
-  if (!memberships || memberships.length === 0) {
-    // No accounts yet — send to onboarding
-    session.userId = sub;
-    session.email = email ?? "";
-    session.accessToken = tokens.access_token;
-    session.isLoggedIn = true;
-    await session.save();
-    return NextResponse.redirect(new URL("/onboarding", req.url), 303);
-  }
-
-  // Resolve active account: prefer stored default, fall back to first membership
-  const { data: pref } = await db
-    .schema("apps_lokalit")
-    .from("user_preferences")
-    .select("default_account_id")
-    .eq("user_sub", sub)
-    .maybeSingle();
-
-  if (!pref) {
-    session.userId = sub;
-    session.email = email ?? "";
-    session.accessToken = tokens.access_token;
-    session.isLoggedIn = true;
-    await session.save();
-    return NextResponse.redirect(new URL("/account-select", req.url), 303);
-  }
-
-  const defaultId = pref.default_account_id;
-  const activeMembership =
-    (defaultId ? memberships.find((m) => m.account_id === defaultId) : null) ??
-    memberships[0];
-
-  const { data: account } = await db
-    .schema("apps_lokalit")
-    .from("accounts")
-    .select("id, account_id")
-    .eq("id", activeMembership.account_id)
-    .maybeSingle();
-
-  if (!account) {
-    // Stale membership — account document was deleted; let user choose
-    session.userId = sub;
-    session.email = email ?? "";
-    session.accessToken = tokens.access_token;
-    session.isLoggedIn = true;
-    await session.save();
-    return NextResponse.redirect(new URL("/account-select", req.url), 303);
-  }
-
   session.userId = sub;
   session.email = email ?? "";
   session.accessToken = tokens.access_token;
-  session.accountId = account.id;
-  session.accountSlug = account.account_id;
   session.isLoggedIn = true;
   await session.save();
 

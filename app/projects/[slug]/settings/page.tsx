@@ -14,7 +14,6 @@ export default async function ProjectSettingsPage({
 
   const session = await getSession();
   if (!session.isLoggedIn) redirect("/api/auth/login");
-  if (!session.accountId) redirect("/onboarding");
 
   const { data: project } = await db
     .schema("apps_lokalit")
