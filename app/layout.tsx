@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Public_Sans, Geist_Mono, Geist } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
+import TopProgress from "@/components/ui/top-progress";
 import { cn } from "@/lib/utils";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
@@ -29,6 +30,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn(publicSans.variable, geistMono.variable, "font-sans", geist.variable)}>
       <body className="antialiased">
+        <TopProgress />
         {children}
         <Toaster position="top-center" />
       </body>
