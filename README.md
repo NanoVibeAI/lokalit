@@ -6,8 +6,6 @@ A free, community-hosted localization management tool. Manage translation keys a
 
 Lokalit gives small teams a centralized place to manage all their translation work:
 
-- **Single sign-on via Supabase** — authentication handled entirely by Supabase Auth using the OAuth 2.0 Authorization Code + PKCE flow; no passwords stored in the app
-- **Account & project memberships** — users are linked to accounts and projects through role-based membership collections (OWNER, ADMIN, MEMBER / OWNER, EDITOR, VIEWER)
 - **Create and manage projects** — organize localization work by product, service, or client; each project gets a unique slug
 - **Manage localization keys** — define translation keys with optional descriptions, and provide translated values per language
 - **Multi-language support** — add as many target languages as needed per project, selected from a full locale list
@@ -23,7 +21,6 @@ Lokalit gives small teams a centralized place to manage all their translation wo
 | Styling | Tailwind CSS v4 |
 | Authentication | [Supabase Auth](https://supabase.com/docs/guides/auth) (OAuth 2.0 PKCE) |
 | Session | [iron-session](https://github.com/vvo/iron-session) |
-| Database | [MongoDB](https://www.mongodb.com/) |
 
 ## Prerequisites
 
@@ -36,9 +33,6 @@ Lokalit gives small teams a centralized place to manage all their translation wo
 Create a `.env.local` file in the project root with the following variables:
 
 ```env
-# MongoDB
-DATABASE_URL=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<dbname>
-
 # Session
 SESSION_SECRET=your-strong-random-secret
 
@@ -110,25 +104,6 @@ lokalit/
 ├── next.config.ts             # Next.js configuration
 └── tsconfig.json              # TypeScript configuration
 ```
-
-## Authentication Flow
-
-Authentication uses **Supabase Auth** as the identity provider via the **OAuth 2.0 Authorization Code + PKCE** flow. No passwords or user credentials are stored in the application database.
-
-1. Visiting `/api/auth/login` generates a PKCE code verifier + challenge and redirects the browser to Supabase's `/auth/v1/oauth/authorize`.
-2. After the user authenticates with Supabase, the browser is redirected back to `/api/auth/callback/oidc` with an authorization code.
-3. The callback exchanges the code for tokens at `/auth/v1/oauth/token` using HTTP Basic auth, decodes the JWT to extract the user's `sub` and `email`, and saves an **iron-session** cookie.
-4. If the user has no account membership yet, they are directed to `/onboarding` to create one. Otherwise they land on `/home`.
-
-Unauthenticated requests are redirected to `/api/auth/login`.
-
-## Core Concepts
-
-### Project
-A project represents a product, service, or client that needs localization. Each project has a unique slug, a default language, and a list of supported locales.
-
-### Localization Key
-A key (e.g., `home.title`, `button.submit`) belongs to a project and holds translated values for each supported language. Keys can have an optional description for translator context. Translators manage values per locale from the Keys Manager UI.
 
 ## Alternatives
 
