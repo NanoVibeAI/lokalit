@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+function getFormString(formData: FormData | null, key: string): string | null {
+  if (!formData) return null;
+  const value = formData.get(key);
+  return typeof value === "string" ? value : null;
+}
+
 async function handleCallback(req: NextRequest) {
   let code: string | null;
   let state: string | null;
@@ -8,15 +14,22 @@ async function handleCallback(req: NextRequest) {
 
   if (req.method === "POST") {
     const body = await req.formData().catch(() => null);
-    code = body?.get("code")?.toString() ?? null;
-    state = body?.get("state")?.toString() ?? null;
-    error = body?.get("error")?.toString() ?? null;
+    code = getFormString(body, "code");
+    state = getFormString(body, "state");
+    error = getFormString(body, "error");
 
     if (!code && !state) {
       const json = await req.json().catch(() => null) as Record<string, string> | null;
       code = json?.code ?? null;
       state = json?.state ?? null;
       error = json?.error ?? null;
+    }
+
+    if (!code || !state) {
+      const { searchParams } = req.nextUrl;
+      code = code ?? searchParams.get("code");
+      state = state ?? searchParams.get("state");
+      error = error ?? searchParams.get("error");
     }
   } else {
     const { searchParams } = req.nextUrl;
