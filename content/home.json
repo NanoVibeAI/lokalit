@@ -1,0 +1,62 @@
+{
+  "seo": {
+    "title": "Lokalit | Localization Platform for Modern Teams",
+    "description": "Ship multilingual products faster with Lokalit. Manage translation keys, collaborate across teams, and connect projects to Figma in one place.",
+    "keywords": [
+      "localization platform",
+      "translation management",
+      "i18n workflow",
+      "figma localization",
+      "team translation tool"
+    ]
+  },
+  "hero": {
+    "eyebrow": "Built for community",
+    "title": "Localize faster, with fewer bottlenecks.",
+    "description": "Lokalit helps your team manage translation keys, coordinate language coverage, and keep content aligned between product, design and development.",
+    "primaryCta": {
+      "label": "Get Started",
+      "href": "/home"
+    },
+    "secondaryCta": {
+    }
+  },
+  "howItWorks": {
+    "title": "How It Works",
+    "steps": [
+      {
+        "title": "Create or join a project",
+        "description": "Authenticate once with NanoVibe SSO and access your organization projects securely."
+      },
+      {
+        "title": "Manage translation keys",
+        "description": "Organize keys by project, define default and supported languages, and update values centrally."
+      },
+      {
+        "title": "Collaborate with confidence",
+        "description": "Connect design and development workflows so teams can ship consistent multilingual experiences."
+      }
+    ]
+  },
+  "faq": {
+    "title": "Frequently Asked Questions",
+    "items": [
+      {
+        "question": "Who is Lokalit for?",
+        "answer": "Lokalit is designed for product teams, developers, and localization contributors working on multilingual products."
+      },
+      {
+        "question": "Do I need a separate account?",
+        "answer": "No. Lokalit is part of NanoVibe community project and uses NanoVibe SSO, so you can sign in with your existing NanoVibe account without creating a new one."
+      },
+      {
+        "question": "Can I connect design and localization workflows?",
+        "answer": "Yes. Lokalit includes Figma-related integration flows so translation context stays close to the product design process."
+      },
+      {
+        "question": "What happens after I sign in?",
+        "answer": "After authentication, you can access your dashboard, create projects, and manage localization projects and keys."
+      }
+    ]
+  }
+}
