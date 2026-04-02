@@ -37,7 +37,7 @@ async function fromBearerToken(req: NextRequest): Promise<AuthContext | null> {
 
   const token = authHeader.slice(7);
 
-  const allowedAudiences = (process.env.ODIC_CLIENT_IDS_WHITELIST ?? "")
+  const allowedAudiences = (process.env.OIDC_CLIENT_APPS_WHITELIST ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
@@ -49,7 +49,8 @@ async function fromBearerToken(req: NextRequest): Promise<AuthContext | null> {
     });
 
     // validate the audiences
-    if (!allowedAudiences.includes(payload.client_id as string)) return null;
+    const appName = (payload as { app_metadata?: { name?: string } }).app_metadata?.name;
+    if (!appName || !allowedAudiences.includes(appName)) return null;
     if (!payload.sub) return null;
 
     return {
